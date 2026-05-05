@@ -1,3 +1,5 @@
+//et img;
+
 let gui;
 let params = {
   gravity_x: 0,
@@ -37,6 +39,10 @@ let transitionTimer = 0;
 let pulseFramesLeft = 0;
 let pulseVector = null;
 let pulseIndex = 0;
+
+// function preload() {
+//   img = loadImage('assets/cup.png');
+// }
 
 function getLevelConfigs() {
   return [
@@ -288,6 +294,9 @@ function draw() {
   cup.display();
   for (let g of gels) g.display();
   drawInfo();
+
+  // imageMode(CENTER);
+  // image(img, mouseX, mouseY, 100, 100);
 }
 
 function updateEmission() {
