@@ -1,4 +1,4 @@
-//et img;
+let img;
 
 let gui;
 let params = {
@@ -40,9 +40,9 @@ let pulseFramesLeft = 0;
 let pulseVector = null;
 let pulseIndex = 0;
 
-// function preload() {
-//   img = loadImage('assets/cup.png');
-// }
+function preload() {
+  img = loadImage('assets/space.png');
+}
 
 function getLevelConfigs() {
   return [
@@ -178,6 +178,8 @@ function loadLevel(index) {
 
 function draw() {
   background(0);
+  imageMode(CENTER);
+  image(img, width / 2, height / 2, width, height);
   if (!currentLevelConfig) return;
 
   levelFrame++;
