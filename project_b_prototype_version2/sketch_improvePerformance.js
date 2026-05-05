@@ -857,9 +857,9 @@ function drawInfo() {
   textAlign(CENTER, CENTER);
   if (gameState === "levelClear") {
     textSize(28);
-    text("Level clear", width / 2, height * 0.14);
+    text("Coffee Served", width / 2, height * 0.14);
     textSize(18);
-    text("Click to continue", width / 2, height * 0.19);
+    text("Click to complete the next order", width / 2, height * 0.19);
   } else if (gameState === "finished") {
     textSize(28);
     text("Shift complete", width / 2, height * 0.14);
