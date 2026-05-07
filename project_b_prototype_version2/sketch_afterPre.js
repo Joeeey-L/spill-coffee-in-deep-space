@@ -92,9 +92,11 @@ let nextGravityRefreshMs = 0;
 let pulseFramesLeft = 0;
 let pulseVector = null;
 let pulseIndex = 0;
-let bgX = 0;
+let bgX_slow = 0;
+let bgX_medium = 0;
+let bgX_fast = 0;
 let bgSpeed = -0.3;
-let bgGraphics;
+let bgGraphics_slow, bgGraphics_medium, bgGraphics_fast;
 
 function preload() {
   img_cup = loadImage('assets/cup.png');
@@ -216,22 +218,21 @@ function restartCurrentOrder() {
   loadOrder(currentOrder.recipeIndex);
 }
 
-function drawStarfield(graphics, startX, startY, w, h) {
-  graphics.push();
-  graphics.translate(startX, startY);
+function createStarfieldLayer(totalWidth, totalHeight, starCount, brightnessScale) {
+  let layer = createGraphics(totalWidth, totalHeight);
 
-  for (let i = 0; i < 1000; i++) {
-    let x = random(w);
-    let y = random(h);
-    let size = random(w / 2000, w / 500);
-    let brightness = random(100, 255);
+  for (let i = 0; i < starCount; i++) {
+    let x = random(totalWidth);
+    let y = random(totalHeight);
+    let size = random(1, 4) * brightnessScale;
+    let brightness = random(100, 255) * brightnessScale;
 
-    graphics.noStroke();
-    graphics.fill(255, brightness);
-    graphics.circle(x, y, size);
+    layer.noStroke();
+    layer.fill(255, brightness);
+    layer.circle(x, y, size);
   }
 
-  graphics.pop();
+  return layer;
 }
 
 function setup() {
@@ -240,19 +241,29 @@ function setup() {
   refreshGravityMode();
   generateNextOrder();
 
-  bgGraphics = createGraphics(width * 2, height);
-  drawStarfield(bgGraphics, 0, 0, width, height);
-  drawStarfield(bgGraphics, width, 0, width, height);
+  bgGraphics_slow = createStarfieldLayer(width * 2, height, 300, 0.3);   // 暗星，少
+  bgGraphics_medium = createStarfieldLayer(width * 2, height, 600, 0.6);  // 中星
+  bgGraphics_fast = createStarfieldLayer(width * 2, height, 400, 1.0);    // 亮星，大
 
 }
 
 function draw() {
   background(0);
-  bgX += bgSpeed;
-  if (bgX <= -width) {
-    bgX = 0;
+  bgX_slow += bgSpeed * 0.3;
+  bgX_medium += bgSpeed * 0.6;
+  bgX_fast += bgSpeed * 1.0;
+  if (bgX_slow <= -width) {
+    bgX_slow += width;
   }
-  image(bgGraphics, bgX, 0);
+  if (bgX_medium <= -width) {
+    bgX_medium += width;
+  }
+  if (bgX_fast <= -width) {
+    bgX_fast += width;
+  }
+  image(bgGraphics_slow, bgX_slow, 0);
+  image(bgGraphics_medium, bgX_medium, 0);
+  image(bgGraphics_fast, bgX_fast, 0);
 
   if (!currentOrder) return;
 
