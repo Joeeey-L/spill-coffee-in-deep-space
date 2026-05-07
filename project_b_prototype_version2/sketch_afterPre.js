@@ -1,4 +1,5 @@
-let img_background;
+// let img_background_1;
+// let img_background_2;
 let img_cup;
 
 let params = {
@@ -91,9 +92,11 @@ let nextGravityRefreshMs = 0;
 let pulseFramesLeft = 0;
 let pulseVector = null;
 let pulseIndex = 0;
+let bgX = 0;
+let bgSpeed = -0.3;
+let bgGraphics;
 
 function preload() {
-  img_background = loadImage('assets/space.png');
   img_cup = loadImage('assets/cup.png');
 }
 
@@ -213,17 +216,44 @@ function restartCurrentOrder() {
   loadOrder(currentOrder.recipeIndex);
 }
 
+function drawStarfield(graphics, startX, startY, w, h) {
+  graphics.push();
+  graphics.translate(startX, startY);
+
+  for (let i = 0; i < 1000; i++) {
+    let x = random(w);
+    let y = random(h);
+    let size = random(w / 2000, w / 500);
+    let brightness = random(100, 255);
+
+    graphics.noStroke();
+    graphics.fill(255, brightness);
+    graphics.circle(x, y, size);
+  }
+
+  graphics.pop();
+}
+
 function setup() {
   createCanvas(windowWidth, windowHeight);
   cup = new Cup(width / 2, height / 2, cup_width, cup_height);
   refreshGravityMode();
   generateNextOrder();
+
+  bgGraphics = createGraphics(width * 2, height);
+  drawStarfield(bgGraphics, 0, 0, width, height);
+  drawStarfield(bgGraphics, width, 0, width, height);
+
 }
 
 function draw() {
   background(0);
-  imageMode(CENTER);
-  image(img_background, width / 2, height / 2, width, height);
+  bgX += bgSpeed;
+  if (bgX <= -width) {
+    bgX = 0;
+  }
+  image(bgGraphics, bgX, 0);
+
   if (!currentOrder) return;
 
   refreshGravityMode();
