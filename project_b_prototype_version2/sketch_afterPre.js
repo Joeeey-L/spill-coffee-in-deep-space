@@ -1,7 +1,6 @@
 let img_background;
 let img_cup;
 
-let gui;
 let params = {
   gravity_x: 0,
   gravity_y: 0.02,
@@ -12,18 +11,69 @@ let params = {
   damping: 0.99,
 };
 
-let goal = 20;
 let cup_width = 80;
 let cup_height = 200;
 let cup_bottom_ratio = 0.62;
 let rotation_speed = 0.03;
-let emit_rate = 30;
+let emit_rate = 24;
 let max_particles = 200;
 
-const LEVEL_CLEAR_DELAY = 90;
+const ORDER_TOLERANCE = 4;
+const GRAVITY_REFRESH_MS = 30000;
 const PULSE_INTERVAL = 300;
 const PULSE_DURATION = 70;
 const ENABLE_DEBUG_SKIP = true; // comment out or set to false to disable presentation skip
+const ORDER_PANEL_WIDTH = 300;
+const ORDER_PANEL_HEIGHT = 138;
+const MATERIAL_SLOT_HEIGHT = 86;
+const GEL_LAYOUT = [
+  { x: 0.2, y: 0.32, r: 30 },
+  { x: 0.8, y: 0.52, r: 30 }
+];
+const MATERIAL_SLOT_LAYOUTS = {
+  1: [0.5],
+  2: [0.38, 0.62],
+  3: [0.28, 0.5, 0.72],
+  4: [0.18, 0.4, 0.6, 0.82]
+};
+
+const MATERIAL_LIBRARY = {
+  espresso: {
+    label: "Espresso",
+    particleColor: [145, 92, 58],
+    emitterColor: [145, 92, 58]
+  },
+  water: {
+    label: "Water",
+    particleColor: [145, 210, 255],
+    emitterColor: [145, 210, 255]
+  },
+  steamedMilk: {
+    label: "Steamed Milk",
+    particleColor: [248, 238, 224],
+    emitterColor: [235, 228, 214]
+  },
+  milkFoam: {
+    label: "Milk Foam",
+    particleColor: [255, 255, 255],
+    emitterColor: [245, 240, 232]
+  }
+};
+
+const ORDER_RECIPES = [
+  { key: "espresso", label: "Espresso", ingredients: { espresso: 10 } },
+  { key: "americano", label: "Americano", ingredients: { espresso: 10, water: 30 } },
+  { key: "macchiato", label: "Macchiato", ingredients: { espresso: 10, milkFoam: 10 } },
+  { key: "flatWhite", label: "Flat White", ingredients: { espresso: 10, steamedMilk: 30 } },
+  { key: "latte", label: "Latte", ingredients: { espresso: 10, steamedMilk: 40, milkFoam: 10 } }
+];
+
+const GRAVITY_MODES = [
+  { key: "tutorial", label: "Stable Pour", pulseStrength: 0.06 },
+  { key: "horizontalDrift", label: "Side Drift", pulseStrength: 0.06 },
+  { key: "drift", label: "Full Drift", pulseStrength: 0.06 },
+  { key: "pulse", label: "Pulse Field", pulseStrength: 0.085 }
+];
 
 let particles = [];
 let boundaries = [];
@@ -31,13 +81,13 @@ let emitters = [];
 let gels = [];
 let cup;
 let frameCount_emit = 0;
-let caught = 0;
-let cupStats = { total: 0, espresso: 0, milk: 0, water: 0, other: 0 };
-let currentLevel = 0;
-let currentLevelConfig = null;
+let cupStats = createEmptyCupStats();
+let currentOrder = null;
+let servedOrders = 0;
 let levelFrame = 0;
-let gameState = "playing";
-let transitionTimer = 0;
+let gameState = "orderPreview";
+let activeGravityMode = null;
+let nextGravityRefreshMs = 0;
 let pulseFramesLeft = 0;
 let pulseVector = null;
 let pulseIndex = 0;
@@ -47,146 +97,140 @@ function preload() {
   img_cup = loadImage('assets/cup.png');
 }
 
-function getLevelConfigs() {
-  return [
-    {
-      title: "Level 1: Training Shift",
-      subtitle: "Catch 30 espresso drops.",
-      targetCaught: 30,
-      emitRate: 24,
-      maxParticles: 120,
-      gravityMode: "tutorial",
-      progressKinds: ["espresso"],
-      emitterConfigs: [
-        { x: width * 0.5, y: 80, maxDrops: 100, kind: "espresso", particleColor: [145, 92, 58], emitterColor: [145, 92, 58] }
-      ],
-      gels: []
-    },
-    {
-      title: "Level 2: Drifting Station",
-      subtitle: "Gravity sways. Catch 30 espresso drops.",
-      targetCaught: 30,
-      emitRate: 24,
-      maxParticles: 130,
-      gravityMode: "horizontalDrift",
-      progressKinds: ["espresso"],
-      emitterConfigs: [
-        { x: width * 0.5, y: 80, maxDrops: 100, kind: "espresso", particleColor: [145, 92, 58], emitterColor: [145, 92, 58] }
-      ],
-      gels: []
-    },
-    {
-      title: "Level 3: Americano Drift",
-      subtitle: "Catch 40 espresso and water drops with difference within 20.",
-      targetCaught: 40,
-      emitRate: 24,
-      maxParticles: 130,
-      gravityMode: "horizontalDrift",
-      progressKinds: ["espresso", "water"],
-      maxKindDifference: 16,
-      emitterConfigs: [
-        { x: width * 0.35, y: 80, maxDrops: 50, kind: "espresso", particleColor: [145, 92, 58], emitterColor: [145, 92, 58] },
-        { x: width * 0.65, y: 80, maxDrops: 50, kind: "water", particleColor: [145, 210, 255], emitterColor: [145, 210, 255] }
-      ],
-      gels: [
-        { x: width * 0.2, y: height * 0.3, r: 30 },
-        { x: width * 0.8, y: height * 0.5, r: 30 }
-      ]
-    },
-    {
-      title: "Level 4: Gel Cleanup Americano",
-      subtitle: "Sudden surges. Catch 40 espresso and water drops with difference within 15.",
-      targetCaught: 40,
-      emitRate: 36,
-      maxParticles: 150,
-      gravityMode: "drift",
-      progressKinds: ["espresso", "water"],
-      maxKindDifference: 12,
-      emitterConfigs: [
-        { x: width * 0.35, y: 80, maxDrops: 60, kind: "espresso", particleColor: [145, 92, 58], emitterColor: [145, 92, 58] },
-        { x: width * 0.65, y: 80, maxDrops: 60, kind: "water", particleColor: [145, 210, 255], emitterColor: [145, 210, 255] }
-      ],
-      gels: [
-        { x: width * 0.2, y: height * 0.3, r: 30 },
-        { x: width * 0.8, y: height * 0.5, r: 30 }
-      ]
-    },
-    {
-      title: "Level 5: Zero-G Latte",
-      subtitle: "Catch 40 espresso and milk drops with difference within 10.",
-      targetCaught: 40,
-      emitRate: 36,
-      maxParticles: 150,
-      gravityMode: "pulse",
-      pulseStrength: 0.085,
-      progressKinds: ["espresso", "milk"],
-      maxKindDifference: 8,
-      emitterConfigs: [
-        { x: width * 0.35, y: 80, maxDrops: 60, kind: "espresso", particleColor: [145, 92, 58], emitterColor: [145, 92, 58] },
-        { x: width * 0.65, y: 80, maxDrops: 60, kind: "milk", particleColor: [250, 244, 226], emitterColor: [235, 235, 220] }
-      ],
-      gels: [
-        { x: width * 0.2, y: height * 0.3, r: 30 },
-        { x: width * 0.8, y: height * 0.5, r: 30 }
-      ]
-    }
-  ];
+function createEmptyCupStats() {
+  return {
+    total: 0,
+    espresso: 0,
+    water: 0,
+    steamedMilk: 0,
+    milkFoam: 0,
+    other: 0
+  };
 }
 
-function setup() {
-  createCanvas(windowWidth, windowHeight);
-  //setGuiPane();
-  cup = new Cup(width / 2, height / 2, cup_width, cup_height);
-  loadLevel(0);
+function makeOrder(recipeIndex) {
+  let recipe = ORDER_RECIPES[recipeIndex];
+  let totalTarget = 0;
+  for (let kind in recipe.ingredients) {
+    totalTarget += recipe.ingredients[kind];
+  }
+
+  return {
+    recipeIndex: recipeIndex,
+    label: recipe.label,
+    ingredients: { ...recipe.ingredients },
+    totalTarget,
+    tolerance: ORDER_TOLERANCE
+  };
 }
 
-function loadLevel(index) {
-  const levels = getLevelConfigs();
-  currentLevel = constrain(index, 0, levels.length - 1);
-  currentLevelConfig = levels[currentLevel];
+function pickRandomRecipeIndex() {
+  return floor(random(ORDER_RECIPES.length));
+}
 
-  goal = currentLevelConfig.targetCaught;
-  emit_rate = currentLevelConfig.emitRate;
-  max_particles = currentLevelConfig.maxParticles;
+function pickRandomGravityMode() {
+  return GRAVITY_MODES[floor(random(GRAVITY_MODES.length))];
+}
 
-  frameCount_emit = 0;
+function refreshGravityMode() {
+  if (activeGravityMode && millis() < nextGravityRefreshMs) return;
+
+  activeGravityMode = { ...pickRandomGravityMode() };
+  nextGravityRefreshMs = millis() + GRAVITY_REFRESH_MS;
   levelFrame = 0;
-  transitionTimer = 0;
-  gameState = "playing";
   pulseFramesLeft = 0;
   pulseVector = null;
   pulseIndex = 0;
+}
 
-  particles = [];
-  boundaries = [];
-  emitters = [];
-  gels = [];
-  caught = 0;
-  cupStats = { total: 0, espresso: 0, milk: 0, water: 0, other: 0 };
+function getGravityRefreshSecondsLeft() {
+  return max(0, ceil((nextGravityRefreshMs - millis()) / 1000));
+}
 
+function resetCupPosition() {
   cup_width = 80;
   cup_height = 200;
   cup = new Cup(width / 2, height * 0.72, cup_width, cup_height);
   cup.angle = 0;
   cup.idleRotation = 0.005;
+}
 
-  for (let emitterConfig of currentLevelConfig.emitterConfigs) {
-    emitters.push(new Emitter(emitterConfig));
-  }
+function resetWorldState() {
+  frameCount_emit = 0;
 
-  for (let gelConfig of currentLevelConfig.gels) {
-    gels.push(new SpillGel(gelConfig.x, gelConfig.y, gelConfig.r));
+  particles = [];
+  boundaries = [];
+  emitters = [];
+  gels = [];
+  cupStats = createEmptyCupStats();
+
+  resetCupPosition();
+}
+
+function setupEmittersForOrder() {
+  let kinds = Object.keys(currentOrder.ingredients);
+  let slots = MATERIAL_SLOT_LAYOUTS[kinds.length] || MATERIAL_SLOT_LAYOUTS[4];
+
+  for (let i = 0; i < kinds.length; i++) {
+    let kind = kinds[i];
+    let material = MATERIAL_LIBRARY[kind];
+    emitters.push(new Emitter({
+      x: width * slots[i],
+      y: MATERIAL_SLOT_HEIGHT,
+      maxDrops: 9999,
+      kind: kind,
+      label: material.label,
+      particleColor: material.particleColor,
+      emitterColor: material.emitterColor
+    }));
   }
+}
+
+function setupGels() {
+  for (let i = 0; i < GEL_LAYOUT.length; i++) {
+    let gelInfo = GEL_LAYOUT[i];
+    gels.push(new SpillGel(width * gelInfo.x, height * gelInfo.y, gelInfo.r));
+  }
+}
+
+function loadOrder(recipeIndex) {
+  currentOrder = makeOrder(recipeIndex);
+  emit_rate = 24;
+  max_particles = max(180, currentOrder.totalTarget * 3);
+
+  resetWorldState();
+  setupEmittersForOrder();
+  setupGels();
+  gameState = "orderPreview";
+}
+
+function generateNextOrder() {
+  loadOrder(pickRandomRecipeIndex());
+}
+
+function restartCurrentOrder() {
+  if (!currentOrder) return;
+  loadOrder(currentOrder.recipeIndex);
+}
+
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  cup = new Cup(width / 2, height / 2, cup_width, cup_height);
+  refreshGravityMode();
+  generateNextOrder();
 }
 
 function draw() {
   background(0);
   imageMode(CENTER);
   image(img_background, width / 2, height / 2, width, height);
-  if (!currentLevelConfig) return;
+  if (!currentOrder) return;
 
-  levelFrame++;
-  updateLevelGravity();
+  refreshGravityMode();
+  if (gameState === "playing") {
+    levelFrame++;
+  }
+  updateOrderGravity();
   updateEmission();
 
   let gravity = createVector(params.gravity_x, params.gravity_y);
@@ -264,7 +308,7 @@ function draw() {
     cup.idleRotation = 0.005;
   }
   else {
-    currentMoveSpeed = cup.idleRotation;
+    currentMoveSpeed = cup.idleRotation + map(noise(frameCount * 0.01), 0, 1, -0.05, 0.05);
   }
 
   cup.angle += currentMoveSpeed;
@@ -288,24 +332,21 @@ function draw() {
     g.update(particles);
   }
 
-  caught = cup.countCaught(particles);
+  cup.countCaught(particles);
   cupStats = getCupStats();
-  checkLevelState();
+  checkOrderState();
 
-  //drawConnections();
   for (let p of particles) p.display();
   for (let b of boundaries) b.display();
   for (let e of emitters) e.display();
   cup.display();
   for (let g of gels) g.display();
   drawInfo();
-
-  // imageMode(CENTER);
-  // image(img, mouseX, mouseY, 100, 100);
 }
 
 function updateEmission() {
   if (gameState !== "playing") return;
+  if (particles.length >= max_particles) return;
 
   frameCount_emit++;
   if (frameCount_emit % emit_rate !== 0) return;
@@ -315,21 +356,22 @@ function updateEmission() {
   }
 }
 
-function updateLevelGravity() {
+function updateOrderGravity() {
   let gx = 0;
   let gy = 0.02;
+  if (!activeGravityMode) return;
 
-  if (currentLevelConfig.gravityMode === "tutorial") {
+  if (activeGravityMode.key === "tutorial") {
     gx = 0;
     gy = 0.024;
-  } else if (currentLevelConfig.gravityMode === "horizontalDrift") {
+  } else if (activeGravityMode.key === "horizontalDrift") {
     gx = 0.018 * sin(levelFrame * 0.012);
     gy = 0.024;
   } else {
     gx = 0.018 * sin(levelFrame * 0.012);
     gy = 0.006 + 0.016 * cos(levelFrame * 0.009);
 
-    if (currentLevelConfig.gravityMode === "pulse") {
+    if (activeGravityMode.key === "pulse") {
       if (pulseFramesLeft <= 0 && levelFrame > 120 && levelFrame % PULSE_INTERVAL === 0) {
         startGravityPulse();
       }
@@ -347,7 +389,7 @@ function updateLevelGravity() {
 }
 
 function startGravityPulse() {
-  let pulseStrength = currentLevelConfig.pulseStrength || 0.06;
+  let pulseStrength = activeGravityMode ? activeGravityMode.pulseStrength || 0.06 : 0.06;
   const pulseDirections = [
     createVector(pulseStrength, 0),
     createVector(-pulseStrength, 0),
@@ -361,56 +403,79 @@ function startGravityPulse() {
 }
 
 function getCupStats() {
-  let stats = { total: 0, espresso: 0, milk: 0, water: 0, other: 0 };
+  let stats = createEmptyCupStats();
 
   for (let p of particles) {
     if (!p.inCup) continue;
     stats.total++;
     if (p.kind === "espresso") stats.espresso++;
-    else if (p.kind === "milk") stats.milk++;
     else if (p.kind === "water") stats.water++;
+    else if (p.kind === "steamedMilk") stats.steamedMilk++;
+    else if (p.kind === "milkFoam") stats.milkFoam++;
     else stats.other++;
   }
 
   return stats;
 }
 
-function getGoalProgress() {
-  if (currentLevelConfig.progressKinds && currentLevelConfig.progressKinds.length > 0) {
-    let total = 0;
-    for (let kind of currentLevelConfig.progressKinds) {
-      total += cupStats[kind] || 0;
-    }
-    return total;
+function isOrderComplete() {
+  if (!currentOrder) return false;
+  if (cupStats.total !== currentOrder.totalTarget) return false;
+
+  for (let kind in currentOrder.ingredients) {
+    let target = currentOrder.ingredients[kind];
+    let actual = cupStats[kind] || 0;
+    if (abs(actual - target) > currentOrder.tolerance) return false;
   }
 
-  return caught;
-}
-
-function hasMetCurrentGoal() {
-  if (currentLevelConfig.progressKinds && currentLevelConfig.progressKinds.length > 0) {
-    let mixCount = getGoalProgress();
-    if (mixCount < goal) return false;
-
-    if (currentLevelConfig.progressKinds.length >= 2 && currentLevelConfig.maxKindDifference !== undefined) {
-      let first = cupStats[currentLevelConfig.progressKinds[0]] || 0;
-      let second = cupStats[currentLevelConfig.progressKinds[1]] || 0;
-      return abs(first - second) <= currentLevelConfig.maxKindDifference;
-    }
-
-    return true;
+  for (let kind of Object.keys(MATERIAL_LIBRARY)) {
+    if (currentOrder.ingredients[kind]) continue;
+    if ((cupStats[kind] || 0) > 0) return false;
   }
 
-  return caught >= goal;
+  return cupStats.other === 0;
 }
 
-function checkLevelState() {
-  if (gameState === "playing" && hasMetCurrentGoal()) {
-    if (currentLevel === getLevelConfigs().length - 1) {
-      gameState = "finished";
-    } else {
-      gameState = "levelClear";
-    }
+function checkOrderState() {
+  if (gameState === "playing" && isOrderComplete()) {
+    gameState = "orderComplete";
+    servedOrders++;
+  }
+}
+
+function drawPanel(x, y, w, h) {
+  push();
+  noStroke();
+  fill(0, 110);
+  rect(x, y, w, h, 16);
+  pop();
+}
+
+function drawOrderOverlay() {
+  if (!currentOrder) return;
+
+  let panelX = width / 2 - 220;
+  let panelY = height * 0.11;
+  let panelW = 440;
+  let panelH = 124;
+
+  drawPanel(panelX, panelY, panelW, panelH);
+
+  fill(255);
+  textAlign(CENTER, CENTER);
+
+  if (gameState === "orderPreview") {
+    textSize(28);
+    text(currentOrder.label, width / 2, panelY + 34);
+    textSize(16);
+    text("Order ready", width / 2, panelY + 64);
+    text("Click anywhere to begin brewing", width / 2, panelY + 92);
+  } else if (gameState === "orderComplete") {
+    textSize(28);
+    text("Order complete", width / 2, panelY + 34);
+    textSize(16);
+    text(currentOrder.label + " served", width / 2, panelY + 64);
+    text("Click anywhere for the next order", width / 2, panelY + 92);
   }
 }
 
@@ -427,6 +492,9 @@ class Particle {
     this.inCup = false;
     this.prevPos = null;
     this.isOffscreen = false;
+    //
+    this.rotFluct = random(-0.01, 0.01);
+    this.sizeFluct = random(0.005, 0.015);
   }
 
   applyForce(force) { this.acc.add(force); }
@@ -449,16 +517,24 @@ class Particle {
   }
 
   display() {
+    push();
+    translate(this.pos.x, this.pos.y);
+    rotate(frameCount * this.rotFluct);
+    scale(sin(frameCount * this.sizeFluct) * 0.15 + 1);
     noStroke();
     const c = this.getDisplayColor();
-    fill(c[0], c[1], c[2], this.bright);
-    ellipse(this.pos.x, this.pos.y, this.r * 2, this.r * 2);
+    fill(c[0], c[1], c[2], this.bright * 0.5);
+    stroke(c[0], c[1], c[2], this.bright);
+    //ellipse(this.pos.x, this.pos.y, this.r * 2, this.r * 2);
+    ellipse(0, 0, this.r * 2, this.r * 1.8);
+    pop();
   }
 
   getDisplayColor() {
     if (this.kind === "espresso") return this.inCup ? [175, 120, 82] : this.baseColor;
-    if (this.kind === "milk") return this.inCup ? [255, 248, 232] : this.baseColor;
     if (this.kind === "water") return this.inCup ? [110, 185, 255] : this.baseColor;
+    if (this.kind === "steamedMilk") return this.inCup ? [255, 248, 232] : this.baseColor;
+    if (this.kind === "milkFoam") return this.inCup ? [255, 252, 244] : this.baseColor;
     if (this.inCup) return [100, 180, 255];
     return this.baseColor;
   }
@@ -756,6 +832,7 @@ class Emitter {
   constructor(config) {
     this.pos = createVector(config.x, config.y);
     this.kind = config.kind || "default";
+    this.label = config.label || this.kind;
     this.maxDrops = config.maxDrops || 100;
     this.emittedCount = 0;
     this.particleColor = config.particleColor || [255, 255, 255];
@@ -773,6 +850,7 @@ class Emitter {
   }
 
   display() {
+    drawPanel(this.pos.x - 58, this.pos.y - 34, 116, 68);
     fill(this.emitterColor[0], this.emitterColor[1], this.emitterColor[2], 220);
     noStroke();
     ellipse(this.pos.x, this.pos.y, 28, 28);
@@ -781,7 +859,7 @@ class Emitter {
       fill(255);
       textAlign(CENTER, CENTER);
       textSize(12);
-      text(this.kind, this.pos.x, this.pos.y - 24);
+      text(this.label, this.pos.x, this.pos.y - 24);
     }
   }
 }
@@ -861,90 +939,95 @@ class SpillGel {
 }
 
 function drawInfo() {
+  if (!currentOrder) return;
+
+  let ingredientKinds = Object.keys(currentOrder.ingredients);
+  let panelX = 12;
+  let panelY = 12;
+  let panelH = 214 + ingredientKinds.length * 24;
+  let recipePanelX = width - ORDER_PANEL_WIDTH - 12;
+  let recipePanelY = 12;
+  let subtitle = "Match each ingredient within 4 particles. Total must match exactly.";
+  if (gameState === "orderPreview") subtitle = "Click to start brewing this order.";
+  if (gameState === "orderComplete") subtitle = "Order served. Click for the next order.";
+
+  drawPanel(panelX, panelY, 320, panelH);
+  drawPanel(recipePanelX, recipePanelY, ORDER_PANEL_WIDTH, ORDER_PANEL_HEIGHT);
+
   noStroke();
   fill(255);
-  textSize(16);
   textAlign(LEFT, BASELINE);
-  text(currentLevelConfig.title, 10, 20);
-  text(currentLevelConfig.subtitle, 10, 40);
-  text("In cup: " + getGoalProgress() + " / " + goal, 10, 60);
-  // text("Remaining drops: " + remainingDrops(), 10, 85);
-  text("Gravity: " + nf(params.gravity_x, 1, 3) + ", " + nf(params.gravity_y, 1, 3), 10, 80);
-  // text("FPS: " + Math.floor(frameRate()), 10, 125);
 
-  if (currentLevelConfig.progressKinds && currentLevelConfig.progressKinds.length > 0) {
-    let y = 150;
-    for (let kind of currentLevelConfig.progressKinds) {
-      let label = kind.charAt(0).toUpperCase() + kind.slice(1);
-      text(label + ": " + (cupStats[kind] || 0), 10, y);
-      y += 20;
-    }
+  textSize(20);
+  text(currentOrder.label, panelX + 16, panelY + 28);
+  textSize(14);
+  text("Orders served: " + servedOrders, panelX + 16, panelY + 54);
+  text("Gravity mode: " + (activeGravityMode ? activeGravityMode.label : ""), panelX + 16, panelY + 76);
+  text("Next gravity shuffle: " + getGravityRefreshSecondsLeft() + "s", panelX + 16, panelY + 98);
+  text("Gravity vector: " + nf(params.gravity_x, 1, 3) + ", " + nf(params.gravity_y, 1, 3), panelX + 16, panelY + 120);
+  text("Cup total: " + cupStats.total + " / " + currentOrder.totalTarget, panelX + 16, panelY + 142);
+  text("Tolerance: +/- " + currentOrder.tolerance + " per ingredient", panelX + 16, panelY + 164);
+  text(subtitle, panelX + 16, panelY + 186, 286);
 
-    if (currentLevelConfig.progressKinds.length >= 2) {
-      let first = cupStats[currentLevelConfig.progressKinds[0]] || 0;
-      let second = cupStats[currentLevelConfig.progressKinds[1]] || 0;
-      text("Difference: " + abs(first - second) + " / " + currentLevelConfig.maxKindDifference, 10, y);
-      y += 20;
-    }
-
-    if (cupStats.other > 0) {
-      text("Waste: " + cupStats.other, 10, y);
-    }
+  let y = panelY + 232;
+  for (let kind of ingredientKinds) {
+    let label = MATERIAL_LIBRARY[kind].label;
+    text(label + ": " + (cupStats[kind] || 0) + " / " + currentOrder.ingredients[kind], panelX + 16, y);
+    y += 16;
   }
 
-  text("Move mouse to carry the cup. A / D or left / right arrows rotate. Press R to restart.", 10, height - 20);
+  textSize(18);
+  text("Recipe", recipePanelX + 16, recipePanelY + 28);
+  textSize(13);
+  text("Placeholder space for order card / recipe art", recipePanelX + 16, recipePanelY + 52, ORDER_PANEL_WIDTH - 32);
 
-  textAlign(CENTER, CENTER);
-  if (gameState === "levelClear") {
-    textSize(28);
-    text("Coffee Served", width / 2, height * 0.14);
-    textSize(18);
-    text("Click to complete the next order", width / 2, height * 0.19);
-  } else if (gameState === "finished") {
-    textSize(28);
-    text("Shift complete", width / 2, height * 0.14);
-    textSize(18);
-    text("Press R to restart from Level 1.", width / 2, height * 0.19);
+  let recipeY = recipePanelY + 86;
+  for (let kind of ingredientKinds) {
+    text("- " + MATERIAL_LIBRARY[kind].label + ": " + currentOrder.ingredients[kind], recipePanelX + 16, recipeY);
+    recipeY += 18;
+  }
+
+  textSize(14);
+  text("Move mouse to carry the cup. A / D or left / right arrows rotate. Press R to restart.", 12, height - 20);
+
+  if (gameState === "orderPreview" || gameState === "orderComplete") {
+    drawOrderOverlay();
   }
 }
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
-  loadLevel(currentLevel);
-}
-
-function setGuiPane() {
-  gui = new Pane();
-  gui.addBinding(params, "gravity_x", { min: -0.05, max: 0.05, step: 0.01 });
-  gui.addBinding(params, "gravity_y", { min: -0.05, max: 0.05, step: 0.01 });
-  gui.addBinding(params, "attract_strength", { min: 0, max: 0.05 });
-  gui.addBinding(params, "merge_dist", { min: 2, max: 10, step: 1 });
-  gui.addBinding(params, "damping", { min: 0.98, max: 1, step: 0.005 });
+  if (currentOrder) restartCurrentOrder();
 }
 
 function mousePressed() {
-  if (gameState === "levelClear") {
-    loadLevel(currentLevel + 1);
+  if (gameState === "orderPreview") {
+    gameState = "playing";
     return;
   }
 
-  // check if clicking on any gel to squeeze it
-  for (let g of gels) {
-    let d = dist(mouseX, mouseY, g.pos.x, g.pos.y);
-    if (d < g.r) {
-      g.squeeze(particles);
+  if (gameState === "orderComplete") {
+    generateNextOrder();
+    return;
+  }
+
+  if (gameState === "playing") {
+    for (let g of gels) {
+      let d = dist(mouseX, mouseY, g.pos.x, g.pos.y);
+      if (d < g.r) {
+        g.squeeze(particles);
+        return;
+      }
     }
   }
 }
 
 function keyPressed() {
   if (key === "r" || key === "R") {
-    if (gameState === "finished") loadLevel(0);
-    else loadLevel(currentLevel);
+    restartCurrentOrder();
   }
 
   if (ENABLE_DEBUG_SKIP && (key === "e" || key === "E")) {
-    let nextLevel = (currentLevel + 1) % getLevelConfigs().length;
-    loadLevel(nextLevel);
+    generateNextOrder();
   }
 }
