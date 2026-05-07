@@ -236,7 +236,6 @@ function draw() {
   let gravity = createVector(params.gravity_x, params.gravity_y);
   for (let p of particles) { p.applyForce(gravity); }
 
-  // ====== 优化后的 O(N^2) 粒子交互循环 ======
   for (let i = 0; i < particles.length; i++) {
     for (let j = i + 1; j < particles.length; j++) {
       let a = particles[i], b = particles[j];
@@ -246,11 +245,10 @@ function draw() {
       let minDist = (a.r + b.r) * 0.85;
 
       if (dSq > minDist * minDist) {
-        // 1. 吸引力逻辑 (距离较远时)
+        // attraction between non-overlapping particles
         let d = constrain(sqrt(dSq), 5, 300);
         let strength = (params.attract_strength * a.r * b.r) / (d * d);
 
-        // 【优化】直接使用原始 x/y 数学计算，避免实例化 p5.Vector
         let fx = (dx / d) * strength;
         let fy = (dy / d) * strength;
 
@@ -260,15 +258,14 @@ function draw() {
         b.acc.y -= fy;
 
       } else if (dSq > 0.0001) {
-        // 2. 碰撞排斥逻辑 (重叠堆积时)
+        // resistance and collision response for overlapping particles
         let d = sqrt(dSq);
         let overlap = minDist - d;
 
-        // 【优化】手动计算法线 (nx, ny)，杜绝 createVector().normalize()
         let nx = dx / d;
         let ny = dy / d;
 
-        // 【优化】位置修正 (Position Correction)
+        // position correction to prevent sinking
         let cx = nx * overlap * 0.5;
         let cy = ny * overlap * 0.5;
         a.pos.x -= cx;
@@ -276,10 +273,9 @@ function draw() {
         b.pos.x += cx;
         b.pos.y += cy;
 
-        // 【优化】动量交换/速度碰撞 (Momentum Exchange)
         let rvx = b.vel.x - a.vel.x;
         let rvy = b.vel.y - a.vel.y;
-        let velAlongNormal = rvx * nx + rvy * ny; // 点乘
+        let velAlongNormal = rvx * nx + rvy * ny; // dot product of relative velocity and normal vector
 
         if (velAlongNormal < 0) {
           let restitution = 0.2;
