@@ -662,7 +662,7 @@ function checkOrderState() {
 function drawOrderOverlay() {
   if (!currentOrder) return;
 
-  let panelY = height * 0.11;
+  let panelY = height * 0.21;
 
   fill(255);
   textAlign(CENTER, CENTER);
