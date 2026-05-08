@@ -1247,13 +1247,14 @@ function drawInfo() {
   drawingContext.shadowBlur = 0;
   drawingContext.shadowColor = 'rgba(0,0,0,0)';
 
-  textSize(14);
-  text("Tolerance: +/- " + currentOrder.tolerance + " per ingredient. Pass: match all ingredients; total must match exactly.", leftX, bottomY);
-  text("Mouse: move cup, click confirm/squeeze. Keyboard: A/D rotate, R restart.", leftX, bottomY + 22);
-  text("Switch Pro: left stick move, right stick rotate, A confirm, B/+ restart.", leftX, bottomY + 44);
-
   textAlign(RIGHT, BASELINE);
-  text("Gravity shuffle in: " + getGravityRefreshSecondsLeft() + "s", width - 12, height - 20);
+  textSize(14);
+  text("Tolerance: +/- " + currentOrder.tolerance + " per ingredient. Pass: match all ingredients; total must match exactly.", width - 12, bottomY);
+  text("Mouse: move cup, click confirm/squeeze. Keyboard: A/D rotate, R restart.", width - 12, bottomY + 22);
+  text("Switch Pro: left stick move, right stick rotate, A confirm, B/+ restart.", width - 12, bottomY + 44);
+
+  textAlign(LEFT, BASELINE);
+  text("Gravity shuffle in: " + getGravityRefreshSecondsLeft() + "s", leftX, height - 20);
 
   drawInvitationPrompt();
   drawGravityShufflePrompt();
