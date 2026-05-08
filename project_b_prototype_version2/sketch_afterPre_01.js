@@ -690,7 +690,7 @@ function drawGravityShufflePrompt() {
   fill(255);
   textAlign(CENTER, CENTER);
   textSize(30);
-  text("Gravity shuffle: " + activeGravityMode.label, width / 2, height / 2 - 150);
+  text("Gravity shuffle: " + activeGravityMode.label, width / 2, height / 2);
   pop();
 
   gravityShufflePromptFrames--;
