@@ -1243,7 +1243,7 @@ function drawInfo() {
   drawingContext.shadowBlur = 30;
   drawingContext.shadowColor = 'rgba(255, 255, 255, 0.8)';
   imageMode(CORNER);
-  drawImageContained(recipeCards[currentOrder.key], 12, 52, 250, 333);
+  drawImageContained(recipeCards[currentOrder.key], 12, 52, width / 8, width / 6);
   drawingContext.shadowBlur = 0;
   drawingContext.shadowColor = 'rgba(0,0,0,0)';
 
